@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <Windows.h>
 #include <gl/GL.h>
 #include <gl/GLU.h>
@@ -7,6 +9,8 @@
 
 #define PI 3.14159265
 #define EPS 0.001	// epsilon
+
+using namespace std;
 
 static float viewer[3];
 static float torus[36][18][3] = {
@@ -21,6 +25,10 @@ static float normalVectorOfPoints[36][18][3] = { 0, };
 static float circleCenterPoint[36][3] = { 0, };
 
 static int TorusTypes = 1;
+
+GLubyte checkTexels[512][512][3];
+GLubyte marbleTexels[512][512][3];
+GLubyte woodTexels[512][512][3];
 
 /**
 	Scale the point
@@ -252,6 +260,42 @@ void DrawCoordinationSystem(float length)
 }
 
 /**
+	Read texels raw files
+*/
+void ReadTexels(string path, GLubyte (*texels)[512][3])
+{
+	FILE* fp = fopen(path.c_str(), "rb");
+	if (fp == NULL)
+	{
+		cout << "No texture map files." << endl;
+		return;
+	}
+
+	for (int h = 0; h < 512; h++)
+	{
+		fread(texels[h], sizeof(GLubyte) * 3, 512, fp);
+	}
+
+	fclose(fp);
+}
+
+/**
+	Init texels
+*/
+void InitTexels()
+{
+	ReadTexels("wood.raw", woodTexels);
+	ReadTexels("check.raw", checkTexels);
+	ReadTexels("marble.raw", marbleTexels);
+
+	// gl Texels' settings
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+}
+
+
+/**
 	Draw torus
 */
 void DrawTorus()
@@ -271,7 +315,9 @@ void DrawTorus()
 	
 	glEnable(GL_LIGHT0);
 
-	// Draw Torus
+	// Draw Torus with texel
+	glEnable(GL_TEXTURE_2D);
+
 	glPushMatrix();
 	{
 		for (int circle = 0; circle < nCircle; circle++)
@@ -284,6 +330,7 @@ void DrawTorus()
 					{
 						for (int y = 0; y < 2; y++)
 						{
+							glTexCoord2f((double)(circle + 1 - x) / 36.0f, (double)(point + 1 - (x + y) % 2) / 18.f);
 							glNormal3fv(normalVectorOfPoints[(circle + 1 - x) % 36][(point + 1 - (x + y) % 2) % 18]);
 							glVertex3fv(torus[(circle + 1 - x) % 36][(point + 1 - (x + y) % 2) % 18]);
 						}
@@ -295,6 +342,7 @@ void DrawTorus()
 	}
 	glPopMatrix();
 
+	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_LIGHTING);
 
 }
@@ -312,21 +360,22 @@ void RenderScene()
 	// Draw cooddination system
 	DrawCoordinationSystem(20);
 
+	InitTexels();
+
 	switch (TorusTypes)
 	{
-	case 1:	// Draw torus only dots
+	case 1:	// Draw torus with marbleTexels
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 512, 0, GL_RGB, GL_UNSIGNED_BYTE, marbleTexels);
 		DrawTorus();
 		break;
-	case 2:	// Draw torus only lines
-
+	case 2:	// Draw torus with woodTexels
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 512, 0, GL_RGB, GL_UNSIGNED_BYTE, woodTexels);
+		DrawTorus();
 		break;
-	case 3:	// Draw torus only quads
-
+	case 3:	// Draw torus with checkTexels
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 512, 0, GL_RGB, GL_UNSIGNED_BYTE, checkTexels);
+		DrawTorus();
 		break;
-	case 4:	// Draw torus only quads
-
-		break;
-
 	}
 
 	glutSwapBuffers();
@@ -361,11 +410,6 @@ void ChangeSize(int w, int h)
 
 }
 
-void ResetDisplay()
-{
-
-}
-
 void Keyboard(unsigned char key, int x, int y)
 {
 	if (key == '1') TorusTypes = 1;
@@ -382,7 +426,7 @@ void main(int argc, char* argv[])
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 	glutInitWindowSize(600, 600);
 	glutCreateWindow("Torus");
-	InitDrawTorus(1.0, 3.0, 5.0);
+	InitDrawTorus(1.5, 3.0, 5.0);
 	glutReshapeFunc(ChangeSize);
 	glutDisplayFunc(RenderScene);
 	glutKeyboardFunc(Keyboard);
